@@ -11,17 +11,20 @@ class AgentePicasFijas:
         self.posibilities = [
             "".join(map(str, perm)) for perm in permutations("0123456789", 4)
         ]
+        self.historial = [] #guarda pares (guess, respuesta)
+
 
     def generate_number(self):
         return choice(self.posibilities)
 
-    def count_picas_fijas(self, guess):
+    def count_picas_fijas(self, guess, aim = None):
+        aim = aim or self.secret_number
         picas = sum(
             1
             for i in range(4)
-            if guess[i] in self.secret_number and guess[i] != self.secret_number[i]
+            if guess[i] in aim and guess[i] != aim[i]
         )
-        fijas = sum(1 for i in range(4) if guess[i] == self.secret_number[i])
+        fijas = sum(1 for i in range(4) if guess[i] == aim[i])
         return picas, fijas
 
     def compute(self, percepcion):
@@ -37,11 +40,21 @@ class AgentePicasFijas:
             return self.guess
 
         elif "," in percepcion:
+            ## recibe respuesta
             self.picas, self.fijas = map(int, percepcion.split(","))
+            self.historial.append((self.guess,(self.picas, self.fijas))) #se agrega el intento y sus respectivas picas
 
             if self.fijas != 4:
-                self.guess = self.generate_number()
-                self.posibilities.remove(self.guess)
+                self.posibilities = [
+                    p for p in self.posibilities
+                    if all(
+                        self.count_picas_fijas(p, prev_guess) == resultado
+                        for prev_guess , resultado in self.historial
+                    )
+                ]
+                if self.posibilities:
+                    self.guess = choice(self.posibilities)
+
             return "L"
 
         elif percepcion.isdigit():
@@ -73,7 +86,7 @@ class Environment:
                     print(f"Negro responde: {picas_fijas}")
                     if picas_fijas == "0,4":
                         self.winner = "B"
-                    self.negro.compute(picas_fijas)
+                    self.blanco.compute(picas_fijas)
                     self.turno = "N"
                 else:
                     print("Turno de Negro")
@@ -83,7 +96,7 @@ class Environment:
                     print(f"Blanco responde: {picas_fijas}")
                     if picas_fijas == "0,4":
                         self.winner = "N"
-                    self.blanco.compute(picas_fijas)
+                    self.negro.compute(picas_fijas)
                     self.turno = "B"
         else:
             print("Hay un error el juego no puede comenzar")
