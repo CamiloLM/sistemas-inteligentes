@@ -49,7 +49,7 @@ class AgentePicasFijas:
             return f"{picas},{fijas}"
 
     def reset_game(self):
-        self.__init__(self)
+        self.__init__()
 
 
 class Environment:
@@ -61,7 +61,7 @@ class Environment:
 
     def start(self):
         # Verifica que los dos agentes esten listos para jugar
-        if self.blanco.compute("B") == "L" and self.egro.compute("N") == "L":
+        if self.blanco.compute("B") == "L" and self.negro.compute("N") == "L":
             print("El juego ha iniciado")
             while self.winner is None:
                 # Juega los turnos del agente blanco y negro
