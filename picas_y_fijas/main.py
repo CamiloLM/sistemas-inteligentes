@@ -28,7 +28,7 @@ class AgentePicasFijas:
         if percepcion == "B" or percepcion == "N":
             # Crea su numero secreto
             self.secret_number = self.generate_number()
-            # Crea su intento
+            # Crea su intento inicial
             self.guess = self.generate_number()
             self.posibilities.remove(self.guess)
             return "L"
@@ -41,6 +41,7 @@ class AgentePicasFijas:
 
             if self.fijas != 4:
                 self.guess = self.generate_number()
+                self.posibilities.remove(self.guess)
             return "L"
 
         elif percepcion.isdigit():
