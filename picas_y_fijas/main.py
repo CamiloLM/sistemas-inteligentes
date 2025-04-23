@@ -1,139 +1,154 @@
-from itertools import permutations
-from random import choice
-
+from random import choice, sample, shuffle
 
 class AgentePicasFijas:
     def __init__(self):
+        self.reset_game()
+
+    def reset_game(self):
         self.secret_number = None
         self.guess = None
         self.picas = 0
         self.fijas = 0
-        self.posibilities = [
-            "".join(map(str, perm)) for perm in permutations("0123456789", 4)
-        ]
-        self.historial = [] #guarda pares (guess, respuesta)
-        self.ready_to_guess = False #B
-        self.ready_to_answer = False #Ya genero el n secreto?
-
+        self.historial = []
+        self.numbers = set("0123456789")
+        self.confirmed = []
+        self.confirmed_pos = [None] * 4
+        self.turn_count = 0
 
     def generate_number(self):
-        return choice(self.posibilities)
+        if len(self.numbers) >= 4:
+            return "".join(sample(list(self.numbers), 4))
+        must = list(self.confirmed)
+        needed = 4 - len(must)
+        pool = set("0123456789") - set(must)
+        extras = sample(list(pool), needed)
+        new_guess = must + extras
+        shuffle(new_guess)
+        return "".join(new_guess)
 
-    def count_picas_fijas(self, guess, aim = None):
+    def count_picas_fijas(self, guess, aim=None):
         aim = aim or self.secret_number
-        picas = sum(1 for i in range(4) if guess[i] in aim and guess[i] != aim[i])
-        fijas = sum(1 for i in range(4) if guess[i] == aim[i])
-        return picas, fijas
+        p = sum(1 for i in range(4) if guess[i] in aim and guess[i] != aim[i])
+        f = sum(1 for i in range(4) if guess[i] == aim[i])
+        return p, f
+
+    def generate_next_guess(self):
+        known_digits = [d for d in self.confirmed if d not in self.confirmed_pos]
+        rest = list(self.numbers - set(known_digits))
+        needed = 4 - len(self.confirmed)
+        extra = sample(rest, needed)
+        guess = self.confirmed + extra
+        shuffle(guess)
+        return "".join(guess)
 
     def compute(self, percepcion: str) -> str:
-        if percepcion == "B":
-            self.ready_to_guess = True
-            self.ready_to_answer = True
-            # Crea su numero secreto
-            self.secret_number = None
-            # Crea su intento inicial
-            self.guess = self.generate_number()
-            self.posibilities.remove(self.guess)
-            self.historial = []
-            return "L"
+        if percepcion == 'L':
+            self.turn_count += 1
 
-        elif percepcion == "N":
-            self.ready_to_answer = True
+        if percepcion == "B" or percepcion == "N":
+            self.reset_game()
             self.secret_number = self.generate_number()
+            self.guess = self.generate_number()
             return "L"
 
-        elif percepcion == "L":
-            if self.guess is None:
+        if percepcion == "L":
+            return self.guess
+
+        if percepcion.isdigit() and len(percepcion) == 4:
+            p, f = self.count_picas_fijas(percepcion)
+            return f"{p},{f}"
+
+        if "," in percepcion:
+            p, f = map(int, percepcion.split(","))
+            self.historial.append((self.guess, (p, f)))
+            total = p + f
+
+            if total == 0:
+                self.numbers -= set(self.guess)
                 self.guess = self.generate_number()
-                self.posibilities.remove(self.guess)
-            return self.guess
 
-        elif "," in percepcion:
-            ## recibe respuesta
-            picas, fijas = map(int, percepcion.split(","))
-            self.historial.append((self.guess,(picas, fijas))) #se agrega el intento y sus respectivas picas
+            elif total == 1:
+                candidates = []
+                for i in range(4):
+                    trial = list(self.guess)
+                    trial[i] = choice(list(self.numbers - set(self.guess)))
+                    trial_str = "".join(trial)
+                    p2, f2 = self.count_picas_fijas(trial_str)
+                    if p2 + f2 < total:
+                        candidates.append(self.guess[i])
+                if candidates:
+                    self.confirmed.append(candidates[0])
+                self.guess = self.generate_number()
 
-            if fijas == 4:
-                return "L"
+            elif total == 2:
+                for i in range(4):
+                    trial = list(self.guess)
+                    original = trial[i]
+                    trial[i] = choice(list(self.numbers - set(trial)))
+                    trial_str = "".join(trial)
+                    p2, f2 = self.count_picas_fijas(trial_str)
+                    if p2 + f2 < total:
+                        self.confirmed.append(original)
+                        break
+                self.guess = self.generate_number()
 
-            self.posibilities = [
-                p for p in self.posibilities
-                if all(
-                    self.count_picas_fijas(p, prev_guess) == resultado
-                    for prev_guess , resultado in self.historial
-                )
-            ]
-            if self.posibilities:
-                self.guess = choice(self.posibilities)
-            return self.guess
+            elif total == 3:
+                for i in range(4):
+                    trial = list(self.guess)
+                    original = trial[i]
+                    trial[i] = choice(list(self.numbers - set(trial)))
+                    trial_str = "".join(trial)
+                    p2, f2 = self.count_picas_fijas(trial_str)
+                    if p2 + f2 < total:
+                        self.confirmed.append(original)
+                        break
+                self.guess = self.generate_number()
 
-        elif percepcion.isdigit() and len(percepcion) == 4:
-            if self.secret_number:
-                picas, fijas = self.count_picas_fijas(percepcion)
-                return f"{picas},{fijas}"
+            elif total == 4:
+                self.guess = self.generate_number()
+                p, f = self.count_picas_fijas(self.guess)
+                if f == 4:
+                    return ""  # found
 
-        return "L" # Por si acaso
-        # def reset_game(self):
-        #     self.__init__()
+            return "L"
+        return ""
 
 
 class Environment:
-    def __init__(self, blanco, negro):
+    def __init__(self, blanco, negro, games=1):
         self.blanco = blanco
         self.negro = negro
-        self.turno = "B"
-        self.winner = None
+        self.games = games
 
     def start(self):
-        # Verifica que los dos agentes esten listos para jugar
-        if self.blanco.compute("B") == "L" and self.negro.compute("N") == "L":
+        for g in range(1, self.games + 1):
+            print(f"\nJuego {g}:")
+            self.blanco.compute("B")
+            self.negro.compute("N")
             print("El juego ha iniciado")
-            while self.winner is None:
-                # Juega los turnos del agente blanco y negro
-                if self.turno == "B":
-                    print("Turno de blanco")
+            turno = "B"
+            winner = None
+            while not winner:
+                if turno == "B":
                     guess = self.blanco.compute("L")
-                    print(f"Blanco adivina: {guess}")
-                    picas_fijas = self.negro.compute(guess)
-                    print(f"Negro responde: {picas_fijas}")
-                    if picas_fijas == "0,4":
-                        self.winner = "B"
-                    self.blanco.compute(picas_fijas)
-                    self.turno = "N"
+                    feedback = self.negro.compute(guess)
+                    if feedback == "0,4":
+                        winner = "Blanco"
+                    self.blanco.compute(feedback)
+                    turno = "N"
                 else:
-                    print("Turno de Negro")
                     guess = self.negro.compute("L")
-                    print(f"Negro adivina: {guess}")
-                    picas_fijas = self.blanco.compute(guess)
-                    print(f"Blanco responde: {picas_fijas}")
-                    if picas_fijas == "0,4":
-                        self.winner = "N"
-                    self.negro.compute(picas_fijas)
-                    self.turno = "B"
-        else:
-            print("Hay un error el juego no puede comenzar")
-
-    def get_winner(self):
-        if self.winner == "B":
-            print("El ganador es el Blanco")
-        elif self.winner == "N":
-            print("El ganador es el Negro")
-        else:
-            print("Hay un error")
+                    feedback = self.blanco.compute(guess)
+                    if feedback == "0,4":
+                        winner = "Negro"
+                    self.negro.compute(feedback)
+                    turno = "B"
+            print(f"Ganador: {winner} en {self.blanco.turn_count + self.negro.turn_count} turnos")
 
 
 if __name__ == "__main__":
-    agente_1 = AgentePicasFijas()
-    agente_2 = AgentePicasFijas()
-    print("=" * 50)
-    print("Primer juego: Agente 1 con Blancas")
-    game_1 = Environment(agente_1, agente_2)
-    game_1.start()
-    game_1.get_winner()
-    print("=" * 50)
-    print("Segundo juego: Agente 2 con Blancas")
-    agente_1 = AgentePicasFijas()
-    agente_2 = AgentePicasFijas()
-    game_2 = Environment(agente_2, agente_1)
-    game_2.start()
-    game_2.get_winner()
+    games = int(input("Número de juegos a simular: "))
+    a1 = AgentePicasFijas()
+    a2 = AgentePicasFijas()
+    env = Environment(a1, a2, games=games)
+    env.start()
